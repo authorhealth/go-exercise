@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/authorhealth/go-exercise/domain"
@@ -21,10 +22,17 @@ func CreateUser(store domain.Storer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		req := &createUserRequest{}
-		err := json.NewDecoder(r.Body).Decode(req)
+		b, err := io.ReadAll(r.Body)
 		if err != nil {
-			respondError(w, r, http.StatusBadRequest, fmt.Errorf("decoding request body: %w", err))
+			respondError(w, r, http.StatusBadRequest, fmt.Errorf("reading request body: %w", err))
+			return
+		}
+		r.Body.Close()
+
+		req := &createUserRequest{}
+		err = json.Unmarshal(b, req)
+		if err != nil {
+			respondError(w, r, http.StatusBadRequest, fmt.Errorf("unmarshaling request body: %w", err))
 			return
 		}
 
