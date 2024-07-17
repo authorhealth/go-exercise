@@ -1,8 +1,10 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -10,13 +12,42 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
+
+func TestCreateUser(t *testing.T) {
+	assert := assert.New(t)
+
+	req := &createUserRequest{
+		NameFirst: "John",
+		NameLast:  "Smith",
+		Email:     "jmith@gmail.com",
+	}
+
+	b, err := json.Marshal(req)
+	assert.NoError(err)
+
+	rr := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(b))
+
+	store := domain.NewMockStorer(t)
+	userStore := domain.NewMockUserStorer(t)
+
+	store.EXPECT().Users().Return(userStore).Once()
+	userStore.EXPECT().Save(r.Context(), mock.MatchedBy(func(user *domain.User) bool {
+		return user.NameFirst == req.NameFirst && user.NameLast == req.NameLast && user.Email == req.Email
+	})).Return(nil).Once()
+
+	CreateUser(store)(rr, r)
+
+	assert.Equal(http.StatusCreated, rr.Result().StatusCode)
+}
 
 func TestGetUsers(t *testing.T) {
 	assert := assert.New(t)
 
 	rr := httptest.NewRecorder()
-	r := httptest.NewRequest("", "/", nil)
+	r := httptest.NewRequest(http.MethodGet, "/users", nil)
 
 	entities := []*domain.User{
 		{
@@ -53,8 +84,8 @@ func TestGetUsers(t *testing.T) {
 	store := domain.NewMockStorer(t)
 	userStore := domain.NewMockUserStorer(t)
 
-	store.On("Users").Return(userStore).Once()
-	userStore.On("Find", r.Context()).Return(entities, nil).Once()
+	store.EXPECT().Users().Return(userStore).Once()
+	userStore.EXPECT().Find(r.Context()).Return(entities, nil).Once()
 
 	GetUsers(store)(rr, r)
 
@@ -68,11 +99,13 @@ func TestGetUsers(t *testing.T) {
 func TestGetUserByID(t *testing.T) {
 	assert := assert.New(t)
 
+	userID := uuid.New().String()
+
 	rr := httptest.NewRecorder()
-	r := httptest.NewRequest("", "/", nil)
+	r := httptest.NewRequest(http.MethodGet, "/users/"+userID, nil)
 
 	entity := &domain.User{
-		ID:        uuid.New().String(),
+		ID:        userID,
 		NameFirst: "John",
 		NameLast:  "Smith",
 		Email:     "jsmith@gmail.com",
@@ -95,8 +128,8 @@ func TestGetUserByID(t *testing.T) {
 	store := domain.NewMockStorer(t)
 	userStore := domain.NewMockUserStorer(t)
 
-	store.On("Users").Return(userStore).Once()
-	userStore.On("FindByID", r.Context(), entity.ID).Return(entity, nil).Once()
+	store.EXPECT().Users().Return(userStore).Once()
+	userStore.EXPECT().FindByID(r.Context(), entity.ID).Return(entity, nil).Once()
 
 	GetUserByID(store)(rr, r)
 
